@@ -12,7 +12,6 @@ using namespace std;
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 int board[4][4];
-int previousBoard[4][4];
 int score = 0;
 string name;
 
@@ -133,17 +132,7 @@ class HashTable{
 			}
 		}
 		return NULL;
-	}
-	void getAllPlayers(Player players[] , int &count){
-		count = 0;
-		for(int i=0; i<TABLE_SIZE;i++){
-			if(!table[i].isEmpty){
-				players[count] = table[i];
-				count++;
-			}
-		}
-	}
-	
+	}	
 };
 HashTable leaderboard;
 class BoardState{  //made class for board because stack directly arrays store nhi karta in cpp
@@ -663,3 +652,4 @@ int main(){
 	}while(choice != 3);
 	return 0;
 }
+
