@@ -5,20 +5,155 @@
 #include<iomanip>
 #include<stack>
 #include<windows.h>
+#include<fstream>
+#include<queue>
 using namespace std;
-
+//add arrow keys
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 int board[4][4];
 int previousBoard[4][4];
 int score = 0;
+string name;
 
+
+class Player{
+	public:
+	string name;
+	int highScore;
+	int gamesPlayed;
+	bool isEmpty;
+	
+    Player() {  // default constructor
+    name = "";
+    highScore = 0;
+    gamesPlayed = 0;
+    isEmpty = true;
+}
+
+	Player(string nm,int Sc,int n){
+		name = nm;
+		highScore = Sc;
+		gamesPlayed = n;
+		isEmpty = false;
+	}
+};
+
+class HashTable{
+	public:
+	static const int TABLE_SIZE = 100;
+	Player table[TABLE_SIZE];
+	
+	int hashFunction(string name){
+		int hash = 0;
+		for(int i = 0 ; i < name.length() ; i++){
+			hash += (int)name[i];
+		}
+		return hash % TABLE_SIZE;
+	}
+	
+	HashTable(){
+		for(int i = 0 ; i < TABLE_SIZE ; i++){
+			table[i].isEmpty = true;
+		}
+	}
+	
+	void insertToHash(string name,int score){
+		int index = hashFunction(name);
+		int startIndex = index;
+		
+		while(!table[index].isEmpty && table[index].name != name){
+			index = (index+1)%TABLE_SIZE;
+			if(index == startIndex){
+				cout<< "Hash TableFULL\n";
+				return;
+			}
+		}
+		
+		if(table[index].isEmpty){
+			table[index] = Player(name,score,1);
+		} else {
+			table[index].gamesPlayed++;
+			if(score > table[index].highScore){
+				table[index].highScore = score;
+			}
+		}
+	}	
+	void saveToFile(){
+		ofstream MyFile("Player.txt");
+		if(!MyFile.is_open()){
+			SetConsoleTextAttribute(hConsole,12);
+			cout << "Error: could not save data"<<endl;
+			SetConsoleTextAttribute(hConsole,7);
+			return;
+		}
+		for(int i=0;i<TABLE_SIZE;i++){
+			if(!table[i].isEmpty){
+				MyFile << table[i].name <<" "<<table[i].highScore <<" "<< table[i].gamesPlayed <<	 endl;
+			}
+		}
+		MyFile.close();
+	}
+	void LoadFromFile(){
+		ifstream in("Player.txt");
+		if(!in.is_open()){
+			return;
+		}
+		string name;
+		int score,games;
+		while(in >> name >> score >> games){
+			int index = hashFunction(name);
+			int startIndex = index;
+			
+			while(!table[index].isEmpty && table[index].name != name){
+				index = (index+1) % TABLE_SIZE;
+				if(index == startIndex){
+					break;
+				}
+			}
+			if(table[index].isEmpty || table[index].name == name){
+				table[index] = Player(name , score , games);
+			}
+		}
+		in.close();
+	}
+	Player *search(string name){
+		int index = hashFunction(name);
+		int startIndex = index;
+		int attempts = 0;
+		
+		while(!table[index].isEmpty && attempts < TABLE_SIZE){
+			if(table[index].name == name){
+				return &table[index];
+			}
+			index = (index + 1) % TABLE_SIZE;
+			attempts++;
+			if(index == startIndex){
+				break;
+			}
+		}
+		return NULL;
+	}
+	void getAllPlayers(Player players[] , int &count){
+		count = 0;
+		for(int i=0; i<TABLE_SIZE;i++){
+			if(!table[i].isEmpty){
+				players[count] = table[i];
+				count++;
+			}
+		}
+	}
+	
+};
+HashTable leaderboard;
 class BoardState{  //made class for board because stack directly arrays store nhi karta in cpp
 	public:
 		int arr[4][4];
 		int score;
+		
 		BoardState(){
 		}
+		
 		BoardState(int board[4][4],int sc){
 			for(int i = 0 ; i < 4 ; i++){
 				for (int  j = 0 ; j < 4 ;j++){
@@ -105,8 +240,16 @@ void PrintBoard(int board[4][4],int score){
 	system("cls");
 	
     SetConsoleTextAttribute(hConsole, 11);
+    Player *p =leaderboard.search(name);
+    int PlayerBest;
+    if(p != NULL){
+    	PlayerBest = p->highScore;
+	} else {
+		PlayerBest = 0;
+	}
     
-	cout<<"\t\t\t\t  SCORE: "<<score<<"\n\n";
+    cout << "\t\t\t PLAYER: "<< name <<" | BEST: "<< PlayerBest << "\n";
+ 	cout<<"\t\t\t\t  SCORE: "<<score<<"\n\n";
     SetConsoleTextAttribute(hConsole, 7);
 			
 	for(int i = 0 ; i < 4 ; i++){
@@ -276,6 +419,56 @@ bool moveUp(int board[4][4], int &score){
 	}
 	return moved;
 }
+void showLeaderBoard(){
+	leaderboard.LoadFromFile();
+	
+	priority_queue< pair<int,string> > pq;
+	
+	for(int i = 0 ; i < leaderboard.TABLE_SIZE ;i++){
+		if(!leaderboard.table[i].isEmpty){
+			pq.push({leaderboard.table[i].highScore,leaderboard.table[i].name});
+		}
+	}
+	if(pq.empty()){
+		SetConsoleTextAttribute(hConsole, 14);
+		cout<<"\n================================" << endl;
+		cout<<"           LEADERBOARD   "<< endl;
+		cout<< "===================================="<<endl;
+		SetConsoleTextAttribute(hConsole,12);
+		cout<<"no players yet! be the first"<<endl;
+		SetConsoleTextAttribute(hConsole, 7);
+		cout << "press any key to continue..\n";
+		getch();
+		return;
+	}
+	SetConsoleTextAttribute(hConsole, 14);
+	cout<<"=========================================="<<endl;
+	cout<<"                    LEADERBOARD  "<< endl;
+	SetConsoleTextAttribute(hConsole, 11);
+	cout<< left << setw(5) << "Rank" << setw(15) << "Name" << "High score\n";
+	SetConsoleTextAttribute(hConsole, 7);
+	cout<<"----------------------------------------\n";
+	int rank = 1;
+	while(!pq.empty() && rank <= 5){
+		if(rank <= 3){
+			SetConsoleTextAttribute(hConsole, 14);
+		} else {
+			SetConsoleTextAttribute(hConsole, 7);
+		}
+		
+		pair<int, string> top = pq.top();
+		pq.pop();
+		cout<<left <<setw(5)<<rank<< setw(15) 
+		<<top.second << top.first <<"\n"<<endl;
+//		pq.pop();
+		rank++;
+	}
+	if(rank == 1){
+		cout << "no scores yey. play a game first\n";
+	}
+	cout<<"\n";
+}
+
 bool moveDown(int board[4][4] , int &score){
 	bool moved = false;
 	for(int j = 0 ; j  < 4 ; j++){
@@ -287,7 +480,7 @@ bool moveDown(int board[4][4] , int &score){
 				index--;
 			}
 		}
-		for(int i = 3 ; i >= 0 ; i--){
+		for(int i = 3 ; i > 0 ; i--){
 			if(temp[i] != 0 && temp[i] == temp[i-1]){
 				temp[i] += temp[i-1];
 				score += temp[i];
@@ -357,18 +550,17 @@ bool isGameOver(int board[4][4]){
 }
 	
 }
-int main(){
-	cout<<"\t\t\t\t2048 GAME\n";
-//	cout<<"Control: W = UP , A = LEFT , S = DOWN , D = RIGHT, U = UNDO , Q = QUIT";
+void PlayGame(){
 	srand(time(0));
 	
-	
+	leaderboard.LoadFromFile();
 	InitializeBoard(board);
+	score = 0 ;
+	history = stack<BoardState>();
+	
 //	PrintBoard(board);
 	addRandomTile(board);
 	addRandomTile(board);
-	addRandomTile(board);
-	
 	
 	bool running = true;
 
@@ -387,42 +579,87 @@ int main(){
 		saveState(board,score);
 		switch(opt){
 			case 'a': case 'A':
-				saveState(board,score);
 				moved = moveLeft(board,score);
 				break;
-			case 'd': case 'D':
-				saveState(board,score);				
+			case 'd': case 'D':			
 				moved = moveRight(board,score);
 				break;
-			case 'w': case 'W':
-				saveState(board,score);				
+			case 'w': case 'W':			
 				moved = moveUp(board,score);
 				break;
-			case 's':case'S':
-				saveState(board,score);				
+			case 's':case'S':			
 				moved = moveDown(board,score);
 				break;
 			case 'q': case'Q':
+				leaderboard.insertToHash(name,score);
+				leaderboard.saveToFile();
 				running = false;
 				break;
 			default:
-				cout<<"\ninvalid move!";
+				SetConsoleTextAttribute(hConsole, 12);
+				cout<<"\ninvalid move! Press any key to continue\n";
+				SetConsoleTextAttribute(hConsole, 7);
+				getch();
 				history.pop();
 				continue;					
 		}
 			if(moved){
 		addRandomTile(board);
-	}		
+		} 		
 	if(isGameOver(board)){
 		PrintBoard(board,score);
+		leaderboard.insertToHash(name,score);
+		leaderboard.saveToFile();
         SetConsoleTextAttribute(hConsole, 12);		
 		cout<<"\n\t\tGAME OVER! No more moves possible\n";
 		cout<<"\t\tFinal Score: "<< score <<"\n";
         SetConsoleTextAttribute(hConsole, 7);		
 		running = false;		
+		}
 	}
+//	leaderboard.LoadFromFile();
+//	leaderboard.insertToHash(name,score);
+//	leaderboard.saveToFile();
+//	
+	cout << "\nScore Saved! Press any key to continue.\n";
+	getch();
+}
 
-	}
-
+int main(){
+	leaderboard.LoadFromFile();
+	SetConsoleTextAttribute(hConsole, 14	);
+	cout << "\n\t\t\t   ==========================\n";
+	cout<<"\t\t\t\t      2048 GAME\n";
+	cout<<"\t\t\t  ==============================\n\n";
+	SetConsoleTextAttribute(hConsole, 7);
+	cout<<"\t\t\t\tEnter your name: ";
+	cin>>name;
+	int choice;
+	do{
+		SetConsoleTextAttribute(hConsole, 11);
+		cout<< "\n\t\t\t === MAIN MENU ===\n";
+		SetConsoleTextAttribute(hConsole, 7);
+		cout<<"1)Play Game\n2)Show Leaderboard\n3)Quit\n";
+		cout<<"\nEnter Your Choice: ";
+		cin >> choice;
+	
+		switch(choice){
+			case 1:
+				PlayGame();
+				break;
+			case 2:
+				showLeaderBoard(); // through heap pehle hashtable mein sara data ayega then usse max heap also hash table checks for duplicates
+				break;
+			case 3:
+				leaderboard.saveToFile();
+				SetConsoleTextAttribute(hConsole, 14);
+				cout<<"\nthanks for playing/visiting.. :)";
+				exit(0);	
+			default:
+				SetConsoleTextAttribute(hConsole, 12);
+				cout<<"Invalid Choice!"<<endl;
+				SetConsoleTextAttribute(hConsole, 7);		
+		}		
+	}while(choice != 3);
 	return 0;
 }
