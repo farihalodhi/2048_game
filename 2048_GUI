@@ -1,0 +1,733 @@
+import java.io.*;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new MainMenu());
+    }
+}
+class MainMenu extends JFrame {
+    public MainMenu() {
+        setTitle("2048 – Main Menu");
+        setSize(500, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        JPanel panel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                GradientPaint gradient = new GradientPaint(
+                        0, 0, new Color(255, 230, 200),
+                        0, getHeight(), new Color(255, 200, 220)
+                );
+                g2.setPaint(gradient);
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+
+        JLabel title = new JLabel("2048", SwingConstants.CENTER);
+        title.setFont(new Font("Arial", Font.BOLD, 80));
+        title.setForeground(new Color(60, 60, 60));
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel subtitle = new JLabel("Join the numbers!", SwingConstants.CENTER);
+        subtitle.setFont(new Font("Arial", Font.ITALIC, 18));
+        subtitle.setForeground(new Color(100, 100, 100));
+        subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JButton newGameBtn = createStyledButton("▶ New Game", new Color(237, 194, 46), new Color(245, 220, 120));
+        JButton continueBtn = createStyledButton("↻ Continue Game", new Color(143, 190, 242), new Color(180, 210, 255));
+        JButton leaderboardBtn = createStyledButton("🏆 Leaderboard", new Color(180, 220, 150), new Color(200, 240, 170));
+        JButton exitBtn = createStyledButton("✕ Exit", new Color(242, 143, 143), new Color(255, 180, 180));
+
+        newGameBtn.addActionListener(e -> {
+            new GameWindow(false);
+            dispose();
+        });
+
+        continueBtn.addActionListener(e -> {
+            File saveFile = new File("savegame.dat");
+            if (saveFile.exists()) {
+                new GameWindow(true);
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "No saved game found!", "Continue Game", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        leaderboardBtn.addActionListener(e -> new LeaderboardWindow());
+        exitBtn.addActionListener(e -> System.exit(0));
+
+        panel.add(Box.createVerticalStrut(60));
+        panel.add(title);
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(subtitle);
+        panel.add(Box.createVerticalStrut(60));
+        panel.add(newGameBtn);
+        panel.add(Box.createVerticalStrut(15));
+        panel.add(continueBtn);
+        panel.add(Box.createVerticalStrut(15));
+        panel.add(leaderboardBtn);
+        panel.add(Box.createVerticalStrut(15));
+        panel.add(exitBtn);
+        panel.add(Box.createVerticalStrut(60));
+
+        add(panel);
+        setVisible(true);
+    }
+
+    private JButton createStyledButton(String text, Color color1, Color color2) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                if (getModel().isPressed()) {
+                    g2.setColor(color1.darker());
+                } else if (getModel().isRollover()) {
+                    GradientPaint gp = new GradientPaint(0, 0, color2, 0, getHeight(), color1);
+                    g2.setPaint(gp);
+                } else {
+                    GradientPaint gp = new GradientPaint(0, 0, color1, 0, getHeight(), color2);
+                    g2.setPaint(gp);
+                }
+
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 25, 25);
+
+                g2.setColor(Color.WHITE);
+                g2.setFont(getFont());
+                FontMetrics fm = g2.getFontMetrics();
+                int x = (getWidth() - fm.stringWidth(getText())) / 2;
+                int y = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(getText(), x, y);
+            }
+        };
+
+        btn.setFont(new Font("Arial", Font.BOLD, 24));
+        btn.setPreferredSize(new Dimension(280, 60));
+        btn.setMaximumSize(new Dimension(280, 60));
+        btn.setFocusable(false);
+        btn.setBorderPainted(false);
+        btn.setContentAreaFilled(false);
+        btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        return btn;
+    }
+}
+
+// -------------------- GAME WINDOW ----------------------
+class GameWindow extends JFrame {
+    private Game2048 game;
+
+    public GameWindow(boolean loadGame) {
+        setTitle("2048 – Warm Palette Edition");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(480, 650);
+        setLocationRelativeTo(null);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(new Color(250, 248, 239));
+
+        game = new Game2048(loadGame);
+
+        // Enhanced score panel
+        JPanel topPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                GradientPaint gp = new GradientPaint(
+                        0, 0, new Color(237, 194, 46),
+                        0, getHeight(), new Color(245, 220, 120)
+                );
+                g2.setPaint(gp);
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        topPanel.setPreferredSize(new Dimension(480, 100));
+        topPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 30, 15));
+
+        JLabel scoreLabel = new JLabel("Score: 0");
+        scoreLabel.setFont(new Font("Arial", Font.BOLD, 28));
+        scoreLabel.setForeground(Color.WHITE);
+
+        JLabel bestLabel = new JLabel("Best: 0");
+        bestLabel.setFont(new Font("Arial", Font.BOLD, 28));
+        bestLabel.setForeground(Color.WHITE);
+
+        JLabel movesLabel = new JLabel("Moves: 0");
+        movesLabel.setFont(new Font("Arial", Font.BOLD, 22));
+        movesLabel.setForeground(Color.WHITE);
+
+        topPanel.add(scoreLabel);
+        topPanel.add(bestLabel);
+        topPanel.add(movesLabel);
+
+        game.setLabels(scoreLabel, bestLabel, movesLabel);
+
+        // Button panel
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        btnPanel.setBackground(new Color(250, 248, 239));
+
+        JButton undoBtn = new JButton("↶ Undo");
+        JButton saveBtn = new JButton("💾 Save");
+        JButton menuBtn = new JButton("🏠 Menu");
+
+        styleButton(undoBtn);
+        styleButton(saveBtn);
+        styleButton(menuBtn);
+
+        undoBtn.addActionListener(e -> game.undo());
+        saveBtn.addActionListener(e -> {
+            game.saveGame();
+            JOptionPane.showMessageDialog(this, "Game saved successfully!", "Save Game", JOptionPane.INFORMATION_MESSAGE);
+        });
+        menuBtn.addActionListener(e -> {
+            int opt = JOptionPane.showConfirmDialog(this, "Return to main menu?\n(Don't forget to save!)", "Main Menu", JOptionPane.YES_NO_OPTION);
+            if (opt == JOptionPane.YES_OPTION) {
+                new MainMenu();
+                dispose();
+            }
+        });
+
+        btnPanel.add(undoBtn);
+        btnPanel.add(saveBtn);
+        btnPanel.add(menuBtn);
+
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(game, BorderLayout.CENTER);
+        mainPanel.add(btnPanel, BorderLayout.SOUTH);
+
+        add(mainPanel);
+        setVisible(true);
+    }
+
+    private void styleButton(JButton btn) {
+        btn.setFont(new Font("Arial", Font.BOLD, 16));
+        btn.setFocusable(false);
+        btn.setBackground(new Color(143, 122, 102));
+        btn.setForeground(Color.WHITE);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    }
+}
+
+// -------------------- GAME PANEL ------------------------
+class Game2048 extends JPanel implements KeyListener {
+    private int[][] board = new int[4][4];
+    private int score = 0;
+    private int bestScore = 0;
+    private int moves = 0;
+    private String playerName = null;
+    private JLabel scoreLabel, bestLabel, movesLabel;
+
+    // History for undo feature
+    private Stack<GameState> history = new Stack<>();
+    private static final int MAX_UNDO = 5;
+
+    public Game2048(boolean loadGame) {
+        setFocusable(true);
+        addKeyListener(this);
+        setBackground(new Color(187, 173, 160));
+
+        loadBestScore();
+
+        if (loadGame) {
+            if (!loadGameFromFile()) {
+                startGame();
+            }
+        } else {
+            startGame();
+        }
+    }
+
+    public void setLabels(JLabel score, JLabel best, JLabel moves) {
+        this.scoreLabel = score;
+        this.bestLabel = best;
+        this.movesLabel = moves;
+        updateDisplay();
+    }
+
+    private void updateDisplay() {
+        if (scoreLabel != null) scoreLabel.setText("Score: " + score);
+        if (bestLabel != null) bestLabel.setText("Best: " + bestScore);
+        if (movesLabel != null) movesLabel.setText("Moves: " + moves);
+    }
+
+    private void startGame() {
+        // Ask for player name
+        playerName = JOptionPane.showInputDialog(null, "Enter your name:", "Player Name", JOptionPane.PLAIN_MESSAGE);
+        if (playerName == null || playerName.isBlank()) playerName = "Player";
+
+        for (int i = 0; i < 2; i++) addRandomTile();
+        saveState();
+        repaint();
+    }
+
+    private void saveState() {
+        if (history.size() >= MAX_UNDO) {
+            history.remove(0);
+        }
+        history.push(new GameState(board, score, moves));
+    }
+
+    public void undo() {
+        if (history.size() > 1) {
+            history.pop(); // Remove current state
+            GameState prev = history.peek();
+            board = prev.copyBoard();
+            score = prev.score;
+            moves = prev.moves;
+            updateDisplay();
+            repaint();
+            JOptionPane.showMessageDialog(this, "Move undone!", "Undo", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this, "No moves to undo!", "Undo", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    public void saveGame() {
+        try {
+            FileWriter fw = new FileWriter("savegame.dat");
+            PrintWriter pw = new PrintWriter(fw);
+
+            pw.println(playerName);
+            pw.println(score);
+            pw.println(moves);
+
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    pw.print(board[i][j] + " ");
+                }
+                pw.println();
+            }
+
+            pw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean loadGameFromFile() {
+        try {
+            File f = new File("savegame.dat");
+            if (!f.exists()) return false;
+
+            Scanner sc = new Scanner(f);
+
+            playerName = sc.nextLine();
+            score = sc.nextInt();
+            moves = sc.nextInt();
+
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    board[i][j] = sc.nextInt();
+                }
+            }
+
+            sc.close();
+            saveState();
+            repaint();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void loadBestScore() {
+        try {
+            File f = new File("bestscore.dat");
+            if (f.exists()) {
+                Scanner sc = new Scanner(f);
+                bestScore = sc.nextInt();
+                sc.close();
+            }
+        } catch (Exception e) {
+            bestScore = 0;
+        }
+    }
+
+    private void saveBestScore() {
+        try {
+            PrintWriter pw = new PrintWriter(new FileWriter("bestscore.dat"));
+            pw.println(bestScore);
+            pw.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void addRandomTile() {
+        ArrayList<Point> empty = new ArrayList<>();
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                if (board[i][j] == 0) empty.add(new Point(i, j));
+
+        if (!empty.isEmpty()) {
+            Point p = empty.get(new Random().nextInt(empty.size()));
+            board[p.x][p.y] = Math.random() < 0.9 ? 2 : 4;
+        }
+    }
+
+    private boolean moveLeft() {
+        boolean moved = false;
+        for (int i = 0; i < 4; i++) {
+            int[] row = board[i];
+            int[] newRow = new int[4];
+            boolean[] merged = new boolean[4];
+            int idx = 0;
+
+            for (int j = 0; j < 4; j++) {
+                if (row[j] != 0) {
+                    if (idx > 0 && newRow[idx - 1] == row[j] && !merged[idx - 1]) {
+                        newRow[idx - 1] *= 2;
+                        score += newRow[idx - 1];
+                        merged[idx - 1] = true;
+                        moved = true;
+                    } else {
+                        newRow[idx++] = row[j];
+                        if (j != idx - 1) moved = true;
+                    }
+                }
+            }
+            board[i] = newRow;
+        }
+        return moved;
+    }
+
+    private void rotateCW() {
+        int[][] rotated = new int[4][4];
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                rotated[j][3 - i] = board[i][j];
+        board = rotated;
+    }
+
+    private boolean move(int dir) {
+        boolean moved;
+        for (int i = 0; i < dir; i++) rotateCW();
+        moved = moveLeft();
+        for (int i = 0; i < (4 - dir) % 4; i++) rotateCW();
+        return moved;
+    }
+
+    @Override
+    public void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        g2.setColor(new Color(187, 173, 160));
+        g2.fillRect(0, 0, getWidth(), getHeight());
+
+        int size = Math.min(getWidth(), getHeight()) / 4;
+        int offsetX = (getWidth() - size * 4) / 2;
+        int offsetY = (getHeight() - size * 4) / 2;
+
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                drawTile(g2, offsetX + j * size, offsetY + i * size, size, board[i][j]);
+            }
+        }
+    }
+
+    private void drawTile(Graphics2D g, int x, int y, int size, int value) {
+        Color bgColor;
+        Color textColor = new Color(119, 110, 101);
+
+        if (value == 0) {
+            bgColor = new Color(205, 193, 180);
+        } else {
+            bgColor = switch (value) {
+                case 2 -> new Color(238, 228, 218);
+                case 4 -> new Color(237, 224, 200);
+                case 8 -> new Color(242, 177, 121);
+                case 16 -> new Color(245, 149, 99);
+                case 32 -> new Color(246, 124, 95);
+                case 64 -> new Color(246, 94, 59);
+                case 128 -> new Color(237, 207, 114);
+                case 256 -> new Color(237, 204, 97);
+                case 512 -> new Color(237, 200, 80);
+                case 1024 -> new Color(237, 197, 63);
+                case 2048 -> new Color(237, 194, 46);
+                default -> new Color(60, 58, 50);
+            };
+
+            if (value > 4) {
+                textColor = Color.WHITE;
+            }
+        }
+
+        g.setColor(new Color(0, 0, 0, 30));
+        g.fillRoundRect(x + 8, y + 8, size - 16, size - 16, 8, 8);
+
+        g.setColor(bgColor);
+        g.fillRoundRect(x + 5, y + 5, size - 10, size - 10, 8, 8);
+
+        if (value != 0) {
+            g.setColor(textColor);
+            int fontSize = value < 100 ? 36 : value < 1000 ? 32 : 28;
+            g.setFont(new Font("Arial", Font.BOLD, fontSize));
+            String s = String.valueOf(value);
+            FontMetrics fm = g.getFontMetrics();
+            int tx = x + (size - fm.stringWidth(s)) / 2;
+            int ty = y + (size + fm.getHeight()) / 2 - fm.getDescent();
+            g.drawString(s, tx, ty);
+        }
+    }
+
+    @Override
+    public void keyPressed(KeyEvent e) {
+        int key = e.getKeyCode();
+        boolean moved = false;
+
+        // Arrow keys
+        if (key == KeyEvent.VK_LEFT) moved = move(0);
+        if (key == KeyEvent.VK_UP) moved = move(1);
+        if (key == KeyEvent.VK_RIGHT) moved = move(2);
+        if (key == KeyEvent.VK_DOWN) moved = move(3);
+
+        // WASD keys
+        if (key == KeyEvent.VK_A) moved = move(0);
+        if (key == KeyEvent.VK_W) moved = move(1);
+        if (key == KeyEvent.VK_D) moved = move(2);
+        if (key == KeyEvent.VK_S) moved = move(3);
+
+        if (moved) {
+            moves++;
+            saveState();
+            addRandomTile();
+
+            if (score > bestScore) {
+                bestScore = score;
+                saveBestScore();
+            }
+
+            updateDisplay();
+            repaint();
+            checkGameOver();
+        }
+    }
+
+    @Override
+    public void keyReleased(KeyEvent e) {}
+
+    @Override
+    public void keyTyped(KeyEvent e) {}
+
+    void checkGameOver() {
+        // Check for 2048 win
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                if (board[i][j] == 2048) {
+                    int opt = JOptionPane.showOptionDialog(null,
+                            "🎉 Congratulations! You reached 2048!\n\nScore: " + score + "\n\nContinue playing?",
+                            "You Win!",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.INFORMATION_MESSAGE,
+                            null,
+                            new String[]{"Continue", "New Game"},
+                            "Continue");
+
+                    if (opt == 1) {
+                        resetGame();
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Check for game over
+        if (!canMove()) {
+            LeaderboardManager.saveScore(playerName, score);
+
+            int opt = JOptionPane.showOptionDialog(null,
+                    "Game Over!\n\nScore: " + score + "\nMoves: " + moves + "\n\nPlay again?",
+                    "Game Over",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE,
+                    null,
+                    new String[]{"New Game", "Main Menu"},
+                    "New Game");
+
+            if (opt == 0) {
+                resetGame();
+            } else {
+                new MainMenu();
+                ((JFrame) SwingUtilities.getWindowAncestor(this)).dispose();
+            }
+        }
+    }
+
+    private void resetGame() {
+        score = 0;
+        moves = 0;
+        board = new int[4][4];
+        history.clear();
+        startGame();
+        updateDisplay();
+        repaint();
+    }
+
+    boolean canMove() {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                if (board[i][j] == 0) return true;
+
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 3; j++)
+                if (board[i][j] == board[i][j + 1]) return true;
+
+        for (int j = 0; j < 4; j++)
+            for (int i = 0; i < 3; i++)
+                if (board[i][j] == board[i + 1][j]) return true;
+
+        return false;
+    }
+}
+
+// ========== GAME STATE FOR UNDO ==========
+class GameState {
+    int[][] board;
+    int score;
+    int moves;
+
+    GameState(int[][] board, int score, int moves) {
+        this.board = new int[4][4];
+        for (int i = 0; i < 4; i++) {
+            System.arraycopy(board[i], 0, this.board[i], 0, 4);
+        }
+        this.score = score;
+        this.moves = moves;
+    }
+
+    int[][] copyBoard() {
+        int[][] copy = new int[4][4];
+        for (int i = 0; i < 4; i++) {
+            System.arraycopy(board[i], 0, copy[i], 0, 4);
+        }
+        return copy;
+    }
+}
+
+// ========== LEADERBOARD MANAGER ==========
+class LeaderboardManager {
+    static void saveScore(String name, int score) {
+        try {
+            PrintWriter out = new PrintWriter(new FileWriter("leaderboard.txt", true));
+            out.println(name + " " + score);
+            out.close();
+        } catch (Exception ignored) {}
+    }
+
+    static ArrayList<ScoreEntry> getTopScores(int limit) {
+        ArrayList<ScoreEntry> scores = new ArrayList<>();
+        try {
+            File f = new File("leaderboard.txt");
+            if (!f.exists()) return scores;
+
+            Scanner sc = new Scanner(f);
+            while (sc.hasNext()) {
+                String name = sc.next();
+                int score = sc.nextInt();
+                scores.add(new ScoreEntry(name, score));
+            }
+            sc.close();
+
+            scores.sort((a, b) -> b.score - a.score);
+
+            if (scores.size() > limit) {
+                scores = new ArrayList<>(scores.subList(0, limit));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return scores;
+    }
+}
+
+class ScoreEntry {
+    String name;
+    int score;
+
+    ScoreEntry(String name, int score) {
+        this.name = name;
+        this.score = score;
+    }
+}
+
+// ========== LEADERBOARD WINDOW ==========
+class LeaderboardWindow extends JFrame {
+    private JTextArea area;
+
+    LeaderboardWindow() {
+        setTitle("🏆 Leaderboard - Top 10");
+        setSize(400, 500);
+        setLocationRelativeTo(null);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(new Color(250, 248, 239));
+
+        JLabel titleLabel = new JLabel("🏆 TOP 10 PLAYERS 🏆", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        titleLabel.setForeground(new Color(60, 58, 50));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(15, 10, 15, 10));
+
+        area = new JTextArea();
+        area.setEditable(false);
+        area.setFont(new Font("Monospaced", Font.BOLD, 16));
+        area.setBackground(new Color(250, 248, 239));
+        area.setForeground(new Color(60, 58, 50));
+
+        JScrollPane scroll = new JScrollPane(area);
+        scroll.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+
+        JButton closeBtn = new JButton("Close");
+        closeBtn.setFont(new Font("Arial", Font.BOLD, 18));
+        closeBtn.setBackground(new Color(143, 122, 102));
+        closeBtn.setForeground(Color.WHITE);
+        closeBtn.setFocusable(false);
+        closeBtn.addActionListener(e -> dispose());
+
+        JPanel btnPanel = new JPanel();
+        btnPanel.setBackground(new Color(250, 248, 239));
+        btnPanel.add(closeBtn);
+
+        mainPanel.add(titleLabel, BorderLayout.NORTH);
+        mainPanel.add(scroll, BorderLayout.CENTER);
+        mainPanel.add(btnPanel, BorderLayout.SOUTH);
+
+        add(mainPanel);
+        loadLeaderboard();
+        setVisible(true);
+    }
+
+    private void loadLeaderboard() {
+        ArrayList<ScoreEntry> topScores = LeaderboardManager.getTopScores(10);
+
+        if (topScores.isEmpty()) {
+            area.setText("\n\n      No scores yet!\n\n    Play a game to add\n      your score!");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n  RANK    NAME           SCORE\n");
+        sb.append("  ═══════════════════════════════\n\n");
+        for (int i = 0; i < topScores.size(); i++) {
+            ScoreEntry entry = topScores.get(i);
+            String medal = i == 0 ? "🥇" : i == 1 ? "🥈" : i == 2 ? "🥉" : "  ";
+            sb.append(String.format("  %s #%-2d  %-12s %6d\n",
+                    medal, i + 1, entry.name, entry.score));
+        }
+        area.setText(sb.toString());
+    }
+}
