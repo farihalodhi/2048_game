@@ -11,10 +11,72 @@ using namespace std;
 //add arrow keys
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
+class MoveNode {
+public:
+    char move;
+    MoveNode* next;
+    
+    MoveNode(char m) {
+        move = m;
+        next = NULL;
+    }
+};
+
+class MoveHistory {
+private:
+    MoveNode* head;
+    
+public:
+    MoveHistory() {
+        head = NULL;
+    }
+    
+    void addMove(char move) {
+        MoveNode* newNode = new MoveNode(move);
+        newNode->next = head;
+        head = newNode;
+    }
+    
+    void displayMoves() {
+        MoveNode* curr = head;
+        cout << "Recent Moves: ";
+        
+        if(curr == NULL) {
+            cout << "None yet";
+            return;
+        }
+        
+        int count = 0;
+        while(count < 5 && curr != NULL) {
+            cout << curr->move;
+            curr = curr->next;
+            count++;
+            
+            if(curr != NULL && count < 5) {
+                cout << " -> ";
+            }
+        }
+    }
+    
+    void clear() {
+        MoveNode* curr = head;
+        while(curr != NULL) {
+            MoveNode* temp = curr;
+            curr = curr->next;
+            delete temp;
+        }
+        head = NULL;
+    }
+    
+    ~MoveHistory() {
+        clear();
+    }
+};
+
 int board[4][4];
 int score = 0;
 string name;
-
+MoveHistory moveHistory;
 
 class Player{
 	public:
@@ -37,6 +99,7 @@ class Player{
 		isEmpty = false;
 	}
 };
+
 
 class HashTable{
 	public:
@@ -258,7 +321,14 @@ void PrintBoard(int board[4][4],int score){
 		}
 	cout << "|\n\t\t-------------------------\n";
 	}
-	cout<<"\nControls: A = LEFT , D = RIGHT , W = UP , S = DOWN, U = UNDO , Q = QUIT\n";
+	
+	// ADD THESE LINES:
+	cout << "\n\t\t";
+	SetConsoleTextAttribute(hConsole, 11);
+	moveHistory.displayMoves();
+	SetConsoleTextAttribute(hConsole, 7);
+	
+	cout<<"\nControls: WASD = MOVE, U = UNDO, H = HINT, R = ANALYZE, Q = QUIT\n";
     SetConsoleTextAttribute(hConsole, 7);	
 //	cout<<"\nUse W for move Up\nUse A to move down\nUse S to move left\nUse D to move right\nUse Q to quit\n";
 }
@@ -408,6 +478,189 @@ bool moveUp(int board[4][4], int &score){
 	}
 	return moved;
 }
+
+bool moveDown(int board[4][4] , int &score){
+	bool moved = false;
+	for(int j = 0 ; j  < 4 ; j++){
+		int temp[4] = {0};
+		int index = 3;
+		for(int i = 3 ; i>=0 ; i--){
+			if(board[i][j]!=0){
+				temp[index] = board[i][j];
+				index--;
+			}
+		}
+		for(int i = 3 ; i > 0 ; i--){
+			if(temp[i] != 0 && temp[i] == temp[i-1]){
+				temp[i] += temp[i-1];
+				score += temp[i];
+				temp[i-1] = 0;
+				moved = true;
+			}
+		}
+		int newCol[4] = {0};
+		index = 3;
+		for(int i = 3 ; i >= 0 ;i--){
+			if(temp[i]!=0){
+				newCol[index] = temp[i];
+				index--;
+			}
+		}
+		for(int i = 0 ; i<4 ; i++){
+			if(board[i][j] != newCol[i]){
+				board[i][j] = newCol[i];
+				moved = true;
+			}
+		}
+	}
+	return moved;	
+}
+// Add PlayerData struct
+struct PlayerData {
+    string name;
+    int score;
+    int gamesPlayed;
+    
+    PlayerData() {
+        name = "";
+        score = 0;
+        gamesPlayed = 0;
+    }
+    
+    PlayerData(string n, int s, int g) {
+        name = n;
+        score = s;
+        gamesPlayed = g;
+    }
+};
+
+// Linear Search - Find players above score
+void linearSearchByScore(int minScore) {
+    leaderboard.LoadFromFile();
+    
+    cout << "\n=== LINEAR SEARCH: Players with score >= " << minScore << " ===\n\n";
+    
+    bool found = false;
+    int count = 0;
+    
+    for(int i = 0; i < leaderboard.TABLE_SIZE; i++) {
+        if(!leaderboard.table[i].isEmpty) {
+            if(leaderboard.table[i].highScore >= minScore) {
+                SetConsoleTextAttribute(hConsole, 11);
+                cout << ++count << ". " << leaderboard.table[i].name;
+                SetConsoleTextAttribute(hConsole, 7);
+                cout << " - Score: " << leaderboard.table[i].highScore 
+                     << " | Games: " << leaderboard.table[i].gamesPlayed << "\n";
+                found = true;
+            }
+        }
+    }
+    
+    if(!found) {
+        SetConsoleTextAttribute(hConsole, 12);
+        cout << "No players found with score >= " << minScore << "\n";
+        SetConsoleTextAttribute(hConsole, 7);
+    } else {
+        cout << "\nTotal players found: " << count << "\n";
+    }
+}
+
+// Convert hash table to array
+int convertHashToArray(PlayerData arr[]) {
+    int count = 0;
+    
+    for(int i = 0; i < leaderboard.TABLE_SIZE; i++) {
+        if(!leaderboard.table[i].isEmpty) {
+            arr[count].name = leaderboard.table[i].name;
+            arr[count].score = leaderboard.table[i].highScore;
+            arr[count].gamesPlayed = leaderboard.table[i].gamesPlayed;
+            count++;
+        }
+    }
+    
+    return count;
+}
+
+// Selection Sort by score (descending)
+void sortPlayersByScore(PlayerData arr[], int n) {
+    for(int i = 0; i < n - 1; i++) {
+        int maxIndex = i;
+        
+        for(int j = i + 1; j < n; j++) {
+            if(arr[j].score > arr[maxIndex].score) {
+                maxIndex = j;
+            }
+        }
+        
+        if(maxIndex != i) {
+            PlayerData temp = arr[i];
+            arr[i] = arr[maxIndex];
+            arr[maxIndex] = temp;
+        }
+    }
+}
+
+// Find player by name in sorted array
+int binarySearchByName(PlayerData arr[], int n, string targetName) {
+    for(int i = 0; i < n; i++) {
+        if(arr[i].name == targetName) {
+            return i + 1;
+        }
+    }
+    return -1;
+}
+
+// Main function - Find player rank
+void findPlayerRank(string playerName) {
+    leaderboard.LoadFromFile();
+    
+    cout << "\n=== FINDING RANK FOR: " << playerName << " ===\n\n";
+    
+    Player* p = leaderboard.search(playerName);
+    
+    if(p == NULL) {
+        SetConsoleTextAttribute(hConsole, 12);
+        cout << "Player '" << playerName << "' not found!\n";
+        SetConsoleTextAttribute(hConsole, 7);
+        return;
+    }
+    
+    cout << "Player found! Score: " << p->highScore << "\n\n";
+    
+    PlayerData players[100];
+    int totalPlayers = convertHashToArray(players);
+    
+    cout << "Total players: " << totalPlayers << "\n";
+    cout << "Sorting...\n";
+    sortPlayersByScore(players, totalPlayers);
+    
+    int rank = binarySearchByName(players, totalPlayers, playerName);
+    
+    if(rank != -1) {
+        SetConsoleTextAttribute(hConsole, 14);
+        cout << "\n=============================\n";
+        cout << "   RANK: #" << rank << " / " << totalPlayers << "\n";
+        cout << "=============================\n";
+        SetConsoleTextAttribute(hConsole, 7);
+        
+        cout << "\n--- Context ---\n";
+        int start = (rank - 2 > 0) ? rank - 2 : 1;
+        int end = (rank + 1 <= totalPlayers) ? rank + 1 : totalPlayers;
+        
+        for(int i = start - 1; i < end; i++) {
+            if(i + 1 == rank) {
+                SetConsoleTextAttribute(hConsole, 10);
+                cout << ">>> ";
+            } else {
+                cout << "    ";
+            }
+            
+            cout << "#" << (i + 1) << " " << players[i].name 
+                 << " - " << players[i].score << "\n";
+            SetConsoleTextAttribute(hConsole, 7);
+        }
+    }
+}
 void showLeaderBoard(){
 	leaderboard.LoadFromFile();
 	
@@ -458,42 +711,118 @@ void showLeaderBoard(){
 	cout<<"\n";
 }
 
-bool moveDown(int board[4][4] , int &score){
-	bool moved = false;
-	for(int j = 0 ; j  < 4 ; j++){
-		int temp[4] = {0};
-		int index = 3;
-		for(int i = 3 ; i>=0 ; i--){
-			if(board[i][j]!=0){
-				temp[index] = board[i][j];
-				index--;
-			}
-		}
-		for(int i = 3 ; i > 0 ; i--){
-			if(temp[i] != 0 && temp[i] == temp[i-1]){
-				temp[i] += temp[i-1];
-				score += temp[i];
-				temp[i-1] = 0;
-				moved = true;
-			}
-		}
-		int newCol[4] = {0};
-		index = 3;
-		for(int i = 3 ; i >= 0 ;i--){
-			if(temp[i]!=0){
-				newCol[index] = temp[i];
-				index--;
-			}
-		}
-		for(int i = 0 ; i<4 ; i++){
-			if(board[i][j] != newCol[i]){
-				board[i][j] = newCol[i];
-				moved = true;
-			}
-		}
-	}
-	return moved;	
+class MoveEvaluation {
+public:
+    char move;           // W, A, S, D
+    int scoreGain;       // Points gained from this move
+    int maxTile;         // Highest tile after move
+    int emptyCells;      // Number of empty cells
+    int totalScore;      // Combined evaluation score
+    
+    MoveEvaluation(char m, int sg, int mt, int ec) {
+        move = m;
+        scoreGain = sg;
+        maxTile = mt;
+        emptyCells = ec;
+        // Calculate total evaluation score
+        totalScore = scoreGain * 2 + emptyCells * 10 + maxTile;
+    }
+};
+
+void copyBoard(int source[4][4], int dest[4][4]) {
+    for(int i = 0; i < 4; i++) {
+        for(int j = 0; j < 4; j++) {
+            dest[i][j] = source[i][j];
+        }
+    }
 }
+
+int findMaxTile(int board[4][4]) {
+    int maxTile = 0;
+    for(int i = 0; i < 4; i++) {
+        for(int j = 0; j < 4; j++) {
+            if(board[i][j] > maxTile) {
+                maxTile = board[i][j];
+            }
+        }
+    }
+    return maxTile;
+}
+
+int countEmptyCells(int board[4][4]) {
+    int count = 0;
+    for(int i = 0; i < 4; i++) {
+        for(int j = 0; j < 4; j++) {
+            if(board[i][j] == 0) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+string suggestBestMove(int board[4][4], int currentScore) {
+    queue<MoveEvaluation> moveQueue;
+    char directions[4] = {'W', 'A', 'S', 'D'};
+    
+    for(int i = 0; i < 4; i++) {
+        int tempBoard[4][4];
+        copyBoard(board, tempBoard);
+        int tempScore = currentScore;
+        bool moved = false;
+        
+        switch(directions[i]) {
+            case 'W':
+                moved = moveUp(tempBoard, tempScore);
+                break;
+            case 'A':
+                moved = moveLeft(tempBoard, tempScore);
+                break;
+            case 'S':
+                moved = moveDown(tempBoard, tempScore);
+                break;
+            case 'D':
+                moved = moveRight(tempBoard, tempScore);
+                break;
+        }
+        
+        if(moved) {
+            int scoreGain = tempScore - currentScore;
+            int maxTile = findMaxTile(tempBoard);
+            int emptyCells = countEmptyCells(tempBoard);
+            
+            MoveEvaluation eval(directions[i], scoreGain, maxTile, emptyCells);
+            moveQueue.push(eval);
+        }
+    }
+    
+    if(moveQueue.empty()) {
+        return "Hint: No valid moves available!";
+    }
+    
+    MoveEvaluation bestMove = moveQueue.front();
+    moveQueue.pop();
+    
+    while(!moveQueue.empty()) {
+        MoveEvaluation current = moveQueue.front();
+        moveQueue.pop();
+        
+        if(current.totalScore > bestMove.totalScore) {
+            bestMove = current;
+        }
+    }
+    
+    string suggestion = "AI Hint: ";
+    switch(bestMove.move) {
+        case 'W': suggestion += "Try UP (W)"; break;
+        case 'A': suggestion += "Try LEFT (A)"; break;
+        case 'S': suggestion += "Try DOWN (S)"; break;
+        case 'D': suggestion += "Try RIGHT (D)"; break;
+    }
+    
+    return suggestion;
+}
+
 bool isGameOver(int board[4][4]){
 	for(int i = 0 ; i < 4 ; i++){
 		for(int j = 0 ; j < 4 ; j++){
@@ -539,6 +868,111 @@ bool isGameOver(int board[4][4]){
 }
 	
 }
+
+bool canReach2048(int board[4][4], int depth) {
+    // Base Case 1: Already has 2048
+    int maxTile = findMaxTile(board);
+    if(maxTile >= 2048) {
+        return true;
+    }
+    
+    // Base Case 2: Depth limit reached (prevent infinite recursion)
+    if(depth <= 0) {
+        return false;
+    }
+    
+    // Base Case 3: Game over, no moves possible
+    if(isGameOver(board)) {
+        return false;
+    }
+    
+    // Recursive Case: Try all 4 directions
+    char directions[4] = {'W', 'A', 'S', 'D'};
+    
+    for(int i = 0; i < 4; i++) {
+        int tempBoard[4][4];
+        int tempScore = 0;
+        copyBoard(board, tempBoard);
+        
+        bool moved = false;
+        
+        switch(directions[i]) {
+            case 'W':
+                moved = moveUp(tempBoard, tempScore);
+                break;
+            case 'A':
+                moved = moveLeft(tempBoard, tempScore);
+                break;
+            case 'S':
+                moved = moveDown(tempBoard, tempScore);
+                break;
+            case 'D':
+                moved = moveRight(tempBoard, tempScore);
+                break;
+        }
+        
+        // If move valid, check recursively
+        if(moved) {
+            // Add a random tile (simulate game progression)
+            addRandomTile(tempBoard);
+            
+            // Recursive call with reduced depth
+            if(canReach2048(tempBoard, depth - 1)) {
+                return true;  // Found a path to 2048!
+            }
+        }
+    }
+    
+    // All paths exhausted, 2048 not reachable
+    return false;
+}
+
+int countPossibleMoves(int board[4][4], int depth) {
+    // Base Case: Reached desired depth
+    if(depth <= 0) {
+        return 1;  // This is one complete path
+    }
+    
+    // If game over, no more moves possible
+    if(isGameOver(board)) {
+        return 0;
+    }
+    
+    int totalPaths = 0;
+    char directions[4] = {'W', 'A', 'S', 'D'};
+    
+    // Try all 4 directions
+    for(int i = 0; i < 4; i++) {
+        int tempBoard[4][4];
+        int tempScore = 0;
+        copyBoard(board, tempBoard);
+        
+        bool moved = false;
+        
+        switch(directions[i]) {
+            case 'W':
+                moved = moveUp(tempBoard, tempScore);
+                break;
+            case 'A':
+                moved = moveLeft(tempBoard, tempScore);
+                break;
+            case 'S':
+                moved = moveDown(tempBoard, tempScore);
+                break;
+            case 'D':
+                moved = moveRight(tempBoard, tempScore);
+                break;
+        }
+        
+        // If move is valid, count paths from this state
+        if(moved) {
+            // Recursively count paths from new state
+            totalPaths += countPossibleMoves(tempBoard, depth - 1);
+        }
+    }
+    
+    return totalPaths;
+}
 void PlayGame(){
 	srand(time(0));
 	
@@ -546,6 +980,7 @@ void PlayGame(){
 	InitializeBoard(board);
 	score = 0 ;
 	history = stack<BoardState>();
+	moveHistory.clear(); 
 	
 //	PrintBoard(board);
 	addRandomTile(board);
@@ -567,34 +1002,81 @@ void PlayGame(){
 		}
 		saveState(board,score);
 		switch(opt){
-			case 'a': case 'A':
-				moved = moveLeft(board,score);
-				break;
-			case 'd': case 'D':			
-				moved = moveRight(board,score);
-				break;
-			case 'w': case 'W':			
-				moved = moveUp(board,score);
-				break;
-			case 's':case'S':			
-				moved = moveDown(board,score);
-				break;
-			case 'q': case'Q':
-				leaderboard.insertToHash(name,score);
-				leaderboard.saveToFile();
-				running = false;
-				break;
-			default:
-				SetConsoleTextAttribute(hConsole, 12);
-				cout<<"\ninvalid move! Press any key to continue\n";
-				SetConsoleTextAttribute(hConsole, 7);
-				getch();
-				history.pop();
-				continue;					
+		    case 'a': case 'A':
+		        moved = moveLeft(board,score);
+		        if(moved) moveHistory.addMove('A'); 
+		        break;
+		        
+		    case 'd': case 'D':			
+		        moved = moveRight(board,score);
+		        if(moved) moveHistory.addMove('D');
+		        break;
+		        
+		    case 'w': case 'W':			
+		        moved = moveUp(board,score);
+		        if(moved) moveHistory.addMove('W');
+		        break;
+		        
+		    case 's': case 'S':			
+		        moved = moveDown(board,score);
+		        if(moved) moveHistory.addMove('S');
+		        break;
+		        
+		    case 'h': case 'H':
+		        SetConsoleTextAttribute(hConsole, 10);
+		        cout << "\n" << suggestBestMove(board, score) << "\n";
+		        SetConsoleTextAttribute(hConsole, 7);
+		        cout << "Press any key to continue...\n";
+		        getch();
+		        history.pop();
+		        continue;
+		        
+		    case 'r': case 'R':
+		        {  // ? ADD BRACES HERE
+		            system("cls");
+		            SetConsoleTextAttribute(hConsole, 14);
+		            cout << "\n=== RECURSIVE GAME ANALYSIS ===\n\n";
+		            SetConsoleTextAttribute(hConsole, 7);
+		            
+		            cout << "Current Max Tile: " << findMaxTile(board) << "\n\n";
+		            
+		            cout << "Analyzing reachability (depth 4)...\n";
+		            if(canReach2048(board, 4)) {
+		                SetConsoleTextAttribute(hConsole, 10);
+		                cout << "? 2048 appears reachable!\n";
+		            } else {
+		                SetConsoleTextAttribute(hConsole, 12);
+		                cout << "? 2048 might not be reachable in 4 moves\n";
+		            }
+		            SetConsoleTextAttribute(hConsole, 7);
+		            
+		            cout << "\nCounting move possibilities (depth 3)...\n";
+		            int count = countPossibleMoves(board, 3);
+		            cout << "Possible 3-move sequences: " << count << "\n";
+		            
+		            cout << "\nPress any key to continue...\n";
+		            getch();
+		            history.pop();
+		            continue;
+		        }  // ? CLOSE BRACES HERE
+		        
+		    case 'q': case 'Q':
+		        leaderboard.insertToHash(name,score);
+		        leaderboard.saveToFile();
+		        running = false;
+		        break;
+		        
+		    default:
+		        SetConsoleTextAttribute(hConsole, 12);
+		        cout<<"\ninvalid move! Press any key to continue\n";
+		        SetConsoleTextAttribute(hConsole, 7);
+		        getch();
+		        history.pop();
+		        continue;					
 		}
-			if(moved){
-		addRandomTile(board);
-		} 		
+		if(moved){
+			addRandomTile(board);
+			} 		
 	if(isGameOver(board)){
 		PrintBoard(board,score);
 		leaderboard.insertToHash(name,score);
@@ -628,7 +1110,11 @@ int main(){
 		SetConsoleTextAttribute(hConsole, 11);
 		cout<< "\n\t\t\t === MAIN MENU ===\n";
 		SetConsoleTextAttribute(hConsole, 7);
-		cout<<"1)Play Game\n2)Show Leaderboard\n3)Quit\n";
+		cout<<"1) Play Game\n";
+		cout<<"2) Show Leaderboard\n";
+		cout<<"3) Search Players by Score\n";
+		cout<<"4) Find My Rank\n";
+		cout<<"5) Quit\n";
 		cout<<"\nEnter Your Choice: ";
 		cin >> choice;
 	
@@ -639,17 +1125,36 @@ int main(){
 			case 2:
 				showLeaderBoard(); // through heap pehle hashtable mein sara data ayega then usse max heap also hash table checks for duplicates
 				break;
-			case 3:
-				leaderboard.saveToFile();
-				SetConsoleTextAttribute(hConsole, 14);
-				cout<<"\nthanks for playing/visiting.. :)";
-				exit(0);	
+			case 3: {
+			    int minScore;
+			    cout << "\nEnter minimum score to search for: ";
+			    cin >> minScore;
+			    linearSearchByScore(minScore);
+			    cout << "\nPress any key to continue...\n";
+			    getch();
+			    break;
+			}
+			
+			case 4: {
+			    string searchName;
+			    cout << "\nEnter player name to find rank: ";
+			    cin >> searchName;
+			    findPlayerRank(searchName);
+			    cout << "\nPress any key to continue...\n";
+			    getch();
+			    break;
+			}
+			
+			case 5:
+			    leaderboard.saveToFile();
+			    SetConsoleTextAttribute(hConsole, 14);
+			    cout<<"\nThanks for playing/visiting.. :)";
+			    exit(0);	
 			default:
 				SetConsoleTextAttribute(hConsole, 12);
 				cout<<"Invalid Choice!"<<endl;
 				SetConsoleTextAttribute(hConsole, 7);		
 		}		
-	}while(choice != 3);
+	}while(choice != 5);
 	return 0;
 }
-
